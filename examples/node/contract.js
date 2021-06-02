@@ -56,29 +56,23 @@ const account = MemoryAccount({ keypair: ACCOUNT_KEYPAIR });
     compilerUrl: 'https://compiler.aepps.com',
     accounts: [account]
   })
+  sdk.api.protectedDryRunTxs = sdk.api.dryRunTxs
 
   // `contractCompile` takes a raw Sophia contract in string form and sends it
   // off to the HTTP compiler for bytecode compilation. In the future this will be done
   // without talking to the node, but requiring a bytecode compiler
   // implementation directly in the SDK.
-  const bytecode = await sdk.contractCompile(CONTRACT_CODE)
-  console.log(`Obtained bytecode ${bytecode.bytecode}`)
-
-  // Invoking `deploy` on the bytecode object will result in the contract
-  // being written to the chain, once the block has been mined.
-  // Sophia contracts always have an `init` method which needs to be invoked,
-  // even when the contract's `state` is `unit` (`()`). The arguments to
-  // `init` have to be provided at deployment time and will be written to the
-  // block as well, together with the contract's bytecode.
-  const deployed = await bytecode.deploy(['5'])
-  console.log(`Contract deployed at ${deployed.address}`)
+  const contract = await sdk.getContractInstance(CONTRACT_CODE, {
+    contractAddress: 'ct_6J6cceEcKb8BTVVQkHKnqSnpkbR9JKADs859xZ4gTn3y9gzVm'
+  })
+  console.log(contract)
 
   // Once the contract has been successfully mined, we can attempt to invoke
   // any public function defined within it. The miner who found the next block
   // will not only be rewarded a fixed amount, but also an amount depending on
   // the amount of gas spend.
-  const call = await deployed.call('multiplyBy', ['7'])
-  console.log(`Contract call transaction hash ${call.hash}`)
+  const call = await contract.methods.multiplyBy.get('7')
+  console.log(call)
 
   // The execution result, if successful, will be an FATE-encoded result value.
   // We are using HTTP compiler to decode the result value.
