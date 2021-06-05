@@ -3,8 +3,7 @@ import { v4 as uuid } from 'uuid'
 
 import { encodeBase58Check } from './crypto'
 import { isBase64, isHex } from './string'
-
-const _sodium = require('libsodium-wrappers-sumo')
+import argon2 from 'argon2-browser'
 
 /**
  * KeyStore module
@@ -32,23 +31,17 @@ const DERIVED_KEY_FUNCTIONS = {
 }
 
 export async function deriveKeyUsingArgon2id (password, salt, options) {
-  const { memlimit_kib: memoryCost, opslimit: timeCost } = options.kdf_params
-  // const isBrowser = !(typeof module !== 'undefined' && module.exports)
-
-  return _sodium.ready.then(async () => {
-    // tslint:disable-next-line:typedef
-    const sodium = _sodium
-
-    const result = sodium.crypto_pwhash(
-      32,
-      password,
-      salt,
-      timeCost,
-      memoryCost * 1024,
-      sodium.crypto_pwhash_ALG_ARGON2ID13
-    )
-    return Buffer.from(result)
+  const { memlimit_kib: mem, opslimit: time, parallelism } = options.kdf_params
+  const { hash } = await argon2.hash({
+    pass: password,
+    salt,
+    time,
+    mem,
+    hashLen: 32,
+    parallelism,
+    type: argon2.ArgonType.Argon2id
   })
+  return Buffer.from(hash)
 }
 
 // CRYPTO PART
