@@ -133,7 +133,7 @@ async function deriveKey (password, nonce, options = {
  * Assemble key data object in secret-storage format.
  * @param {buffer} name Key name.
  * @param {buffer} derivedKey Password-derived secret key.
- * @param {buffer} privateKey Private key.
+ * @param {string|buffer} privateKey Private key.
  * @param {buffer} nonce Randomly generated 24byte nonce.
  * @param {buffer} salt Randomly generated 16byte salt.
  * @param {Object=} options Encryption parameters.
@@ -195,7 +195,7 @@ export async function recover (password, keyObject) {
  * Export private key to keystore secret-storage format.
  * @param {String} name Key name.
  * @param {String} password User-supplied password.
- * @param {String} privateKey Private key.
+ * @param {String|Buffer} privateKey Private key.
  * @param {Buffer} nonce Randomly generated 24byte nonce.
  * @param {Buffer} salt Randomly generated 16byte salt.
  * @param {Object=} options Encryption parameters.
