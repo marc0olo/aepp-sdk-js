@@ -319,7 +319,7 @@ export function transformDecodedData (aci, result, { skipTransformDecoded = fals
  * @param bindings
  * @return {Object} JoiSchema
  */
-export function prepareSchema (type, { bindings } = {}) {
+function prepareSchema (type, bindings) {
   const { t, generic } = readType(type, { bindings })
 
   switch (t) {
@@ -352,12 +352,12 @@ export function prepareSchema (type, { bindings } = {}) {
     case SOPHIA_TYPES.bool:
       return Joi.boolean().error(getJoiErrorMsg)
     case SOPHIA_TYPES.list:
-      return Joi.array().items(prepareSchema(generic, { bindings })).error(getJoiErrorMsg)
+      return Joi.array().items(prepareSchema(generic, bindings)).error(getJoiErrorMsg)
     case SOPHIA_TYPES.tuple:
-      return Joi.array().ordered(generic.map(type => prepareSchema(type, { bindings }).required())).label('Tuple argument').error(getJoiErrorMsg)
+      return Joi.array().ordered(generic.map(type => prepareSchema(type, bindings).required())).label('Tuple argument').error(getJoiErrorMsg)
     case SOPHIA_TYPES.record:
       return Joi.object(
-        generic.reduce((acc, { name, type }) => ({ ...acc, [name]: prepareSchema(type, { bindings }) }), {})
+        generic.reduce((acc, { name, type }) => ({ ...acc, [name]: prepareSchema(type, bindings) }), {})
       ).error(getJoiErrorMsg)
     case SOPHIA_TYPES.hash:
       return JoiBinary.binary().bufferCheck(32).error(getJoiErrorMsg)
@@ -366,7 +366,7 @@ export function prepareSchema (type, { bindings } = {}) {
     case SOPHIA_TYPES.signature:
       return JoiBinary.binary().bufferCheck(64).error(getJoiErrorMsg)
     case SOPHIA_TYPES.option:
-      return prepareSchema(generic, { bindings }).optional().error(getJoiErrorMsg)
+      return prepareSchema(generic, bindings).optional().error(getJoiErrorMsg)
     // @Todo Need to transform Map to Array of arrays before validating it
     // case SOPHIA_TYPES.map:
     //   return Joi.array().items(Joi.array().ordered(generic.map(type => prepareSchema(type))))
@@ -455,7 +455,7 @@ const JoiBinary = Joi.extend((joi) => ({
 export function validateArguments (aci, params) {
   const validationSchema = Joi.array().ordered(
     aci.arguments
-      .map(({ type }, i) => prepareSchema(type, { bindings: aci.bindings }).label(`[${params[i]}]`))
+      .map(({ type }, i) => prepareSchema(type, aci.bindings).label(`[${params[i]}]`))
   ).sparse(true).label('Argument')
   const { error } = Joi.validate(params, validationSchema, { abortEarly: false })
   if (error) {
