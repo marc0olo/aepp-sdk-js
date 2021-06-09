@@ -1,7 +1,7 @@
 <a id="module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client"></a>
 
 ### @aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client
-RPC client helpers
+RpcClient module
 
 **Example**  
 ```js
@@ -140,39 +140,39 @@ Check if aepp has access to account
 | --- | --- | --- |
 | address | `String` | Account address |
 
-<a id="module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--exports.RpcClient+isConnected"></a>
+<a id="module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--module.exports+isConnected"></a>
 
-##### exports.RpcClient.isConnected() ⇒ `Boolean`
+##### module.exports.isConnected() ⇒ `Boolean`
 Check if is connected
 
-**Kind**: instance method of [`exports.RpcClient`](#exp_module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--exports.RpcClient)  
+**Kind**: instance method of [`module.exports`](#exp_module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--module.exports)  
 **Returns**: `Boolean` - is connected  
 **rtype**: `() => Boolean`
-<a id="module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--exports.RpcClient+getCurrentAccount"></a>
+<a id="module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--module.exports+getCurrentAccount"></a>
 
-##### exports.RpcClient.getCurrentAccount(options) ⇒ `String`
+##### module.exports.getCurrentAccount(options) ⇒ `String`
 Get selected account
 
-**Kind**: instance method of [`exports.RpcClient`](#exp_module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--exports.RpcClient)  
+**Kind**: instance method of [`module.exports`](#exp_module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--module.exports)  
 **rtype**: `({ onAccount } = {}) => String`
 
 | Param | Type | Description |
 | --- | --- | --- |
 | options | `Object` | Options |
 
-<a id="module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--exports.RpcClient+disconnect"></a>
+<a id="module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--module.exports+disconnect"></a>
 
-##### exports.RpcClient.disconnect() ⇒ `void`
+##### module.exports.disconnect() ⇒ `void`
 Disconnect
 
-**Kind**: instance method of [`exports.RpcClient`](#exp_module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--exports.RpcClient)  
+**Kind**: instance method of [`module.exports`](#exp_module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--module.exports)  
 **rtype**: `() => void`
-<a id="module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--exports.RpcClient+updateSubscription"></a>
+<a id="module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--module.exports+updateSubscription"></a>
 
-##### exports.RpcClient.updateSubscription(type, value) ⇒ `Array.&lt;String&gt;`
+##### module.exports.updateSubscription(type, value) ⇒ `Array.&lt;String&gt;`
 Update subscription
 
-**Kind**: instance method of [`exports.RpcClient`](#exp_module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--exports.RpcClient)  
+**Kind**: instance method of [`module.exports`](#exp_module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--module.exports)  
 **rtype**: `(type: String, value: String) => void`
 
 | Param | Type | Description |
@@ -180,25 +180,12 @@ Update subscription
 | type | `String` | Subscription type |
 | value | `String` | Subscription value |
 
-<a id="module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--exports.RpcClient+addAction"></a>
+<a id="module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--module.exports+request"></a>
 
-##### exports.RpcClient.addAction(action, resolvers) ⇒ `Object`
-Add new action to actions
-
-**Kind**: instance method of [`exports.RpcClient`](#exp_module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--exports.RpcClient)  
-**rtype**: `(action: Object, [r: Function, j: Function]) => Object`
-
-| Param | Type | Description |
-| --- | --- | --- |
-| action | `Object` | Action object |
-| resolvers | `Array.&lt;function()&gt;` | Array with two function [resolve, reject] action |
-
-<a id="module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--exports.RpcClient+request"></a>
-
-##### exports.RpcClient.request(name, params) ⇒ `Promise`
+##### module.exports.request(name, params) ⇒ `Promise`
 Make a request
 
-**Kind**: instance method of [`exports.RpcClient`](#exp_module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--exports.RpcClient)  
+**Kind**: instance method of [`module.exports`](#exp_module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--module.exports)  
 **Returns**: `Promise` - Promise which will be resolved after receiving response message  
 **rtype**: `(name: String, params: Object) => Promise`
 
@@ -207,12 +194,12 @@ Make a request
 | name | `String` | Method name |
 | params | `Object` | Method params |
 
-<a id="module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--exports.RpcClient+processResponse"></a>
+<a id="module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--module.exports+processResponse"></a>
 
-##### exports.RpcClient.processResponse(msg, [transformResult]) ⇒ `void`
+##### module.exports.processResponse(msg, [transformResult]) ⇒ `void`
 Process response message
 
-**Kind**: instance method of [`exports.RpcClient`](#exp_module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--exports.RpcClient)  
+**Kind**: instance method of [`module.exports`](#exp_module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--module.exports)  
 **rtype**: `(msg: Object, transformResult: Function) => void`
 
 | Param | Type | Description |
@@ -220,10 +207,3 @@ Process response message
 | msg | `Object` | Message object |
 | [transformResult] | `function` | Optional parser function for message |
 
-<a id="module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--exports.RpcClient.RpcClients"></a>
-
-##### exports.RpcClient.RpcClients() ⇒ `Object`
-Contain functionality for managing multiple RPC clients (RpcClient stamp)
-
-**Kind**: static method of [`exports.RpcClient`](#exp_module_@aeternity/aepp-sdk/es/utils/aepp-wallet-communication/rpc/rpc-client--exports.RpcClient)  
-**rtype**: `Stamp`

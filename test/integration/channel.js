@@ -20,17 +20,17 @@ import { describe, it, before, after, beforeEach, afterEach } from 'mocha'
 import * as sinon from 'sinon'
 import BigNumber from 'bignumber.js'
 import { getSdk, BaseAe, networkId } from './'
-import { generateKeyPair, encodeBase64Check } from '../../es/utils/crypto'
-import { unpackTx, buildTx, buildTxHash } from '../../es/tx/builder'
-import { decode } from '../../es/tx/builder/helpers'
-import Channel from '../../es/channel'
-import MemoryAccount from '../../es/account/memory'
+import { generateKeyPair, encodeBase64Check } from '../../src/utils/crypto'
+import { unpackTx, buildTx, buildTxHash } from '../../src/tx/builder'
+import { decode } from '../../src/tx/builder/helpers'
+import Channel from '../../src/channel'
+import MemoryAccount from '../../src/account/memory'
 
 const wsUrl = process.env.TEST_WS_URL || 'ws://localhost:3014/channel'
 
 const identityContract = `
 contract Identity =
-  entrypoint main(x : int) : int = x
+  entrypoint getArg(x : int) : int = x
 `
 
 function waitForChannel (channel) {
@@ -54,8 +54,6 @@ describe('Channel', function () {
   let contractAddress
   let contractEncodeCall
   let callerNonce
-  let majorVersion
-  let minorVersion
   const initiatorSign = sinon.spy((tag, tx) => initiator.signTransaction(tx))
   const responderSign = sinon.spy((tag, tx) => {
     if (typeof responderShouldRejectUpdate === 'number') {
@@ -87,9 +85,6 @@ describe('Channel', function () {
     sharedParams.initiatorId = await initiator.address()
     sharedParams.responderId = await responder.address()
     await initiator.spend(BigNumber('500e18').toString(), await responder.address())
-    const version = initiator.getNodeInfo().version.split(/[.-]/).map(i => parseInt(i, 10))
-    majorVersion = version[0]
-    minorVersion = version[1]
   })
 
   after(() => {
@@ -686,15 +681,11 @@ describe('Channel', function () {
   })
 
   it('can reestablish a channel', async () => {
-    const existingChannelIdKey =
-      majorVersion > 5 || (majorVersion === 5 && minorVersion >= 2)
-        ? 'existingFsmId'
-        : 'existingChannelId'
     initiatorCh = await Channel({
       ...sharedParams,
       role: 'initiator',
       port: 3002,
-      [existingChannelIdKey]: existingChannelId,
+      existingFsmId: existingChannelId,
       offchainTx,
       sign: initiatorSign
     })
@@ -843,33 +834,33 @@ describe('Channel', function () {
       sign: responderSign
     })
     await Promise.all([waitForChannel(initiatorCh), waitForChannel(responderCh)])
-    const code = await initiator.compileContractAPI(identityContract, { backend: 'aevm' })
-    const callData = await initiator.contractEncodeCallDataAPI(identityContract, 'init', [], { backend: 'aevm' })
+    const code = await initiator.compileContractAPI(identityContract)
+    const callData = await initiator.contractEncodeCallDataAPI(identityContract, 'init', [])
     const roundBefore = initiatorCh.round()
     const result = await initiatorCh.createContract({
       code,
       callData,
       deposit: 1000,
-      vmVersion: 6,
-      abiVersion: 1
+      vmVersion: 5,
+      abiVersion: 3
     }, async (tx) => initiator.signTransaction(tx))
     result.should.eql({ accepted: true, address: result.address, signedTx: (await initiatorCh.state()).signedTx })
     initiatorCh.round().should.equal(roundBefore + 1)
     contractAddress = result.address
-    contractEncodeCall = (method, args) => initiator.contractEncodeCallDataAPI(identityContract, method, args, { backend: 'aevm' })
+    contractEncodeCall = (method, args) => initiator.contractEncodeCallDataAPI(identityContract, method, args)
   })
 
   it('can create a contract and reject', async () => {
     responderShouldRejectUpdate = true
-    const code = await initiator.compileContractAPI(identityContract, { backend: 'aevm' })
-    const callData = await initiator.contractEncodeCallDataAPI(identityContract, 'init', [], { backend: 'aevm' })
+    const code = await initiator.compileContractAPI(identityContract)
+    const callData = await initiator.contractEncodeCallDataAPI(identityContract, 'init', [])
     const roundBefore = initiatorCh.round()
     const result = await initiatorCh.createContract({
       code,
       callData,
       deposit: BigNumber('10e18'),
-      vmVersion: 4,
-      abiVersion: 1
+      vmVersion: 5,
+      abiVersion: 3
     }, async (tx) => initiator.signTransaction(tx))
     initiatorCh.round().should.equal(roundBefore)
     result.should.eql({ ...result, accepted: false })
@@ -877,28 +868,28 @@ describe('Channel', function () {
 
   it('can abort contract sign request', async () => {
     const errorCode = 12345
-    const code = await initiator.compileContractAPI(identityContract, { backend: 'aevm' })
-    const callData = await initiator.contractEncodeCallDataAPI(identityContract, 'init', [], { backend: 'aevm' })
+    const code = await initiator.compileContractAPI(identityContract)
+    const callData = await initiator.contractEncodeCallDataAPI(identityContract, 'init', [])
     const result = await initiatorCh.createContract({
       code,
       callData,
       deposit: BigNumber('10e18'),
-      vmVersion: 4,
-      abiVersion: 1
+      vmVersion: 5,
+      abiVersion: 3
     }, () => errorCode)
     result.should.eql({ accepted: false })
   })
 
   it('can abort contract with custom error code', async () => {
     responderShouldRejectUpdate = 12345
-    const code = await initiator.compileContractAPI(identityContract, { backend: 'aevm' })
-    const callData = await initiator.contractEncodeCallDataAPI(identityContract, 'init', [], { backend: 'aevm' })
+    const code = await initiator.compileContractAPI(identityContract)
+    const callData = await initiator.contractEncodeCallDataAPI(identityContract, 'init', [])
     const result = await initiatorCh.createContract({
       code,
       callData,
       deposit: BigNumber('10e18'),
-      vmVersion: 4,
-      abiVersion: 1
+      vmVersion: 5,
+      abiVersion: 3
     }, async (tx) => initiator.signTransaction(tx))
     result.should.eql({
       accepted: false,
@@ -911,9 +902,9 @@ describe('Channel', function () {
     const roundBefore = initiatorCh.round()
     const result = await initiatorCh.callContract({
       amount: 0,
-      callData: await contractEncodeCall('main', ['42']),
+      callData: await contractEncodeCall('getArg', ['42']),
       contract: contractAddress,
-      abiVersion: 1
+      abiVersion: 3
     }, async (tx) => initiator.signTransaction(tx))
     result.should.eql({ accepted: true, signedTx: (await initiatorCh.state()).signedTx })
     initiatorCh.round().should.equal(roundBefore + 1)
@@ -923,9 +914,9 @@ describe('Channel', function () {
   it('can call a force progress', async () => {
     const forceTx = await initiatorCh.forceProgress({
       amount: 0,
-      callData: await contractEncodeCall('main', ['42']),
+      callData: await contractEncodeCall('getArg', ['42']),
       contract: contractAddress,
-      abiVersion: 1
+      abiVersion: 3
     }, async (tx) => initiator.signTransaction(tx))
     console.log('after done')
     const hash = buildTxHash(forceTx.tx)
@@ -938,9 +929,9 @@ describe('Channel', function () {
     const roundBefore = initiatorCh.round()
     const result = await initiatorCh.callContract({
       amount: 0,
-      callData: await contractEncodeCall('main', ['42']),
+      callData: await contractEncodeCall('getArg', ['42']),
       contract: contractAddress,
-      abiVersion: 1
+      abiVersion: 3
     }, async (tx) => initiator.signTransaction(tx))
     initiatorCh.round().should.equal(roundBefore)
     result.should.eql({ ...result, accepted: false })
@@ -950,9 +941,9 @@ describe('Channel', function () {
     const errorCode = 12345
     const result = await initiatorCh.callContract({
       amount: 0,
-      callData: await contractEncodeCall('main', ['42']),
+      callData: await contractEncodeCall('getArg', ['42']),
       contract: contractAddress,
-      abiVersion: 1
+      abiVersion: 3
     }, () => errorCode)
     result.should.eql({ accepted: false })
   })
@@ -961,9 +952,9 @@ describe('Channel', function () {
     responderShouldRejectUpdate = 12345
     const result = await initiatorCh.callContract({
       amount: 0,
-      callData: await contractEncodeCall('main', ['42']),
+      callData: await contractEncodeCall('getArg', ['42']),
       contract: contractAddress,
-      abiVersion: 1
+      abiVersion: 3
     }, async (tx) => initiator.signTransaction(tx))
     result.should.eql({
       accepted: false,
@@ -989,16 +980,16 @@ describe('Channel', function () {
       returnType: 'ok',
       returnValue: result.returnValue
     })
-    const value = await initiator.contractDecodeDataAPI('int', result.returnValue)
-    value.should.eql({ type: 'word', value: 42 })
+    const value = await initiator.contractDecodeCallResultAPI(identityContract, 'getArg', result.returnValue, result.returnType)
+    value.should.equal(42)
   })
 
   it('can call a contract using dry-run', async () => {
     const result = await initiatorCh.callContractStatic({
       amount: 0,
-      callData: await contractEncodeCall('main', ['42']),
+      callData: await contractEncodeCall('getArg', ['42']),
       contract: contractAddress,
-      abiVersion: 1
+      abiVersion: 3
     })
     result.should.eql({
       callerId: await initiator.address(),
@@ -1011,8 +1002,8 @@ describe('Channel', function () {
       returnType: 'ok',
       returnValue: result.returnValue
     })
-    const value = await initiator.contractDecodeDataAPI('int', result.returnValue)
-    value.should.eql({ type: 'word', value: 42 })
+    const value = await initiator.contractDecodeCallResultAPI(identityContract, 'getArg', result.returnValue, result.returnType)
+    value.should.equal(42)
   })
 
   it('can clean contract calls', async () => {
@@ -1028,13 +1019,13 @@ describe('Channel', function () {
     const result = await initiatorCh.getContractState(contractAddress)
     result.should.eql({
       contract: {
-        abiVersion: 1,
+        abiVersion: 3,
         active: true,
         deposit: 1000,
         id: contractAddress,
         ownerId: await initiator.address(),
         referrerIds: [],
-        vmVersion: 6
+        vmVersion: 5
       },
       contractState: result.contractState
     })
@@ -1074,36 +1065,18 @@ describe('Channel', function () {
     )
     result.accepted.should.be.true
     const channelId = await initiatorCh.id()
-    const round = initiatorCh.round()
-    let ch
-    if (majorVersion > 5 || (majorVersion === 5 && minorVersion >= 2)) {
-      const fsmId = initiatorCh.fsmId()
-      initiatorCh.disconnect()
-      ch = await Channel({
-        url: sharedParams.url,
-        host: sharedParams.host,
-        port: 3006,
-        role: 'initiator',
-        existingChannelId: channelId,
-        existingFsmId: fsmId
-      })
-      await waitForChannel(ch)
-      ch.fsmId().should.equal(fsmId)
-    } else {
-      initiatorCh.disconnect()
-      ch = await Channel.reconnect({
-        ...sharedParams,
-        role: 'initiator',
-        port: 3006,
-        sign: initiatorSign
-      }, {
-        channelId,
-        round,
-        role: 'initiator',
-        pubkey: await initiator.address()
-      })
-      await waitForChannel(ch)
-    }
+    const fsmId = initiatorCh.fsmId()
+    initiatorCh.disconnect()
+    const ch = await Channel({
+      url: sharedParams.url,
+      host: sharedParams.host,
+      port: 3006,
+      role: 'initiator',
+      existingChannelId: channelId,
+      existingFsmId: fsmId
+    })
+    await waitForChannel(ch)
+    ch.fsmId().should.equal(fsmId)
     // TODO: why node doesn't return signed_tx when channel is reestablished?
     // await new Promise((resolve) => {
     //   const checkRound = () => {

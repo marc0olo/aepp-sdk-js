@@ -6,7 +6,7 @@ Memory Account module
 **Example**  
 ```js
 //JS
-import MemoryAccount from '@aeternity/aepp-sdk/es/account/memory'
+import MemoryAccount from '@aeternity/aepp-sdk/'
 
 //NodeJS
 const { Universal: MemoryAccount } = require('@aeternity/aepp-sdk')

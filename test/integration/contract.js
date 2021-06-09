@@ -14,24 +14,33 @@
  *  OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  *  PERFORMANCE OF THIS SOFTWARE.
  */
-import Compiler from '../../es/contract/compiler'
 import { describe, it, before } from 'mocha'
-import { BaseAe, getSdk, compilerUrl, publicKey } from './'
-import { decode } from '../../es/tx/builder/helpers'
+import { expect } from 'chai'
+import { BaseAe, getSdk, publicKey } from './'
+import { decode } from '../../src/tx/builder/helpers'
+import { DRY_RUN_ACCOUNT } from '../../src/tx/builder/schema'
 import * as R from 'ramda'
 import { randomName } from '../utils'
-import { decodeEvents, readType, SOPHIA_TYPES } from '../../es/contract/aci/transformation'
-import { hash, personalMessageToBinary } from '../../es/utils/crypto'
-import { getFunctionACI } from '../../es/contract/aci/helpers'
+import { decodeEvents, readType, SOPHIA_TYPES } from '../../src/contract/aci/transformation'
+import { hash, personalMessageToBinary } from '../../src/utils/crypto'
+import { getFunctionACI } from '../../src/contract/aci/helpers'
 
 const identityContract = `
 contract Identity =
- entrypoint main(x : int) = x
+ entrypoint getArg(x : int) = x
 `
 
-const errorContract = `
-contract Identity =
- payable stateful entrypoint main(x : address) = Chain.spend(x, 1000000000)
+const contractWithBrokenDeploy = `
+contract Foo =
+  entrypoint init() = require(false, "CustomErrorMessage")
+`
+
+const contractWithBrokenMethods = `
+contract Foo =
+  payable stateful entrypoint failWithoutMessage(x : address) = Chain.spend(x, 1000000000)
+
+  payable stateful entrypoint failWithMessage() =
+    require(false, "CustomErrorMessage")
 `
 
 const stateContract = `
@@ -49,12 +58,12 @@ include "testLib"
 contract Voting =
   entrypoint sumNumbers(x: int, y: int) : int = TestLib.sum(x, y)
 `
-const testContract = `
+const genTestContract = isCompiler6 => `
 namespace Test =
   function double(x: int): int = x*2
 
 
-contract Voting =
+contract ${isCompiler6 ? 'interface' : ''} Voting =
   type test_type = int
   record state = { value: string, key: test_type, testOption: option(string) }
   record test_record = { value: string, key: list(test_type) }
@@ -314,7 +323,7 @@ describe('Contract', function () {
     const callArg = 1
     const { bytecode } = await contract.contractCompile(identityContract)
     const callDataDeploy = await contract.contractEncodeCall(identityContract, 'init', [])
-    const callDataCall = await contract.contractEncodeCall(identityContract, 'main', [callArg.toString()])
+    const callDataCall = await contract.contractEncodeCall(identityContract, 'getArg', [callArg.toString()])
 
     const deployStatic = await contract.contractCallStatic(identityContract, null, 'init', callDataDeploy, { bytecode })
     deployStatic.result.should.have.property('gasUsed')
@@ -325,13 +334,13 @@ describe('Contract', function () {
     deployed.result.should.have.property('returnType')
     deployed.should.have.property('address')
 
-    const callStaticRes = await contract.contractCallStatic(identityContract, deployed.address, 'main', callDataCall)
+    const callStaticRes = await contract.contractCallStatic(identityContract, deployed.address, 'getArg', callDataCall)
     callStaticRes.result.should.have.property('gasUsed')
     callStaticRes.result.should.have.property('returnType')
     const decodedCallStaticResult = await callStaticRes.decode()
     decodedCallStaticResult.should.be.equal(callArg)
 
-    const callRes = await contract.contractCall(identityContract, deployed.address, 'main', callDataCall)
+    const callRes = await contract.contractCall(identityContract, deployed.address, 'getArg', callDataCall)
     callRes.result.should.have.property('gasUsed')
     callRes.result.should.have.property('returnType')
     callRes.result.should.have.property('returnType')
@@ -345,9 +354,9 @@ describe('Contract', function () {
 
     const deployed = await bytecode.deploy([], { onAccount })
     deployed.result.callerId.should.be.equal(onAccount)
-    const callRes = await deployed.call('main', ['42'])
+    const callRes = await deployed.call('getArg', ['42'])
     callRes.result.callerId.should.be.equal(onAccount)
-    const callStaticRes = await deployed.callStatic('main', ['42'])
+    const callStaticRes = await deployed.callStatic('getArg', ['42'])
     callStaticRes.result.callerId.should.be.equal(onAccount)
   })
 
@@ -365,14 +374,31 @@ describe('Contract', function () {
     res.result.should.have.property('gasUsed')
     res.result.should.have.property('returnType')
   })
-  it('Test handleError(Parse and check contract execution error)', async () => {
-    const code = await contract.contractCompile(errorContract)
-    const deployed = await code.deploy()
-    try {
-      await deployed.call('main', [await contract.address()])
-    } catch (e) {
-      e.message.indexOf('Invocation failed').should.not.be.equal(-1)
-    }
+
+  describe('_handleCallError', () => {
+    it('throws error on deploy', async () => {
+      const code = await contract.contractCompile(contractWithBrokenDeploy)
+      try {
+        await code.deploy()
+      } catch (e) {
+        e.message.should.be.equal('Invocation failed: "CustomErrorMessage"')
+      }
+    })
+
+    it('throws errors on method call', async () => {
+      const code = await contract.contractCompile(contractWithBrokenMethods)
+      const deployed = await code.deploy()
+      try {
+        await deployed.call('failWithoutMessage', [await contract.address()])
+      } catch (e) {
+        e.message.should.be.equal('Invocation failed')
+      }
+      try {
+        await deployed.call('failWithMessage')
+      } catch (e) {
+        e.message.should.be.equal('Invocation failed: "CustomErrorMessage"')
+      }
+    })
   })
 
   it('Dry-run without accounts', async () => {
@@ -381,28 +407,28 @@ describe('Contract', function () {
     client.addresses().length.should.be.equal(0)
     const address = await client.address().catch(e => false)
     address.should.be.equal(false)
-    const { result } = await client.contractCallStatic(identityContract, deployed.address, 'main', ['42'])
-    result.callerId.should.be.equal(client.Ae.defaults.dryRunAccount.pub)
+    const { result } = await client.contractCallStatic(identityContract, deployed.address, 'getArg', ['42'])
+    result.callerId.should.be.equal(DRY_RUN_ACCOUNT.pub)
   })
 
   it('calls deployed contracts', async () => {
-    const result = await deployed.call('main', ['42'])
+    const result = await deployed.call('getArg', ['42'])
     return result.decode().should.eventually.become(42)
   })
 
-  it('call contract/deploy with `waitMined: false`', async () => {
+  it('call contract/deploy with waitMined: false', async () => {
     const deployed = await bytecode.deploy([], { waitMined: false })
     await contract.poll(deployed.transaction, { interval: 50, attempts: 1200 })
-    Boolean(deployed.result === undefined).should.be.equal(true)
-    Boolean(deployed.txData === undefined).should.be.equal(true)
-    const result = await deployed.call('main', ['42'], { waitMined: false, verify: false })
-    Boolean(result.result === undefined).should.be.equal(true)
-    Boolean(result.txData === undefined).should.be.equal(true)
+    expect(deployed.result).to.be.equal(undefined)
+    deployed.txData.should.not.be.equal(undefined)
+    const result = await deployed.call('getArg', ['42'], { waitMined: false, verify: false })
+    expect(result.result).to.be.equal(undefined)
+    result.txData.should.not.be.equal(undefined)
     await contract.poll(result.hash, { interval: 50, attempts: 1200 })
   })
 
   it('calls deployed contracts static', async () => {
-    const result = await deployed.callStatic('main', ['42'])
+    const result = await deployed.callStatic('getArg', ['42'])
     return result.decode().should.eventually.become(42)
   })
 
@@ -431,7 +457,7 @@ describe('Contract', function () {
       try {
         await contract.contractCompile(contractWithLib)
       } catch (e) {
-        e.message.indexOf('Couldn\'t find include file').should.not.be.equal(-1)
+        e.response.text.should.include('Couldn\'t find include file')
       }
     })
     it('Can deploy contract with external deps', async () => {
@@ -447,7 +473,7 @@ describe('Contract', function () {
       deployedStatic.result.should.have.property('returnType')
 
       const encodedCallData = await compiled.encodeCall('sumNumbers', ['1', '2'])
-      encodedCallData.indexOf('cb_').should.not.be.equal(-1)
+      encodedCallData.should.satisfy(s => s.startsWith('cb_'))
     })
     it('Can call contract with external deps', async () => {
       const callResult = await deployed.call('sumNumbers', ['1', '2'])
@@ -463,17 +489,6 @@ describe('Contract', function () {
   describe('Sophia Compiler', function () {
     let callData
     let bytecode
-    it('Init un-compatible compiler version', async () => {
-      try {
-        // Init compiler
-        const compiler = await Compiler({ compilerUrl })
-        // Overwrite compiler version
-        compiler.compilerVersion = '1.0.0'
-        await compiler.checkCompatibility()
-      } catch (e) {
-        e.message.indexOf('Unsupported compiler version 1.0.0').should.not.be.equal(-1)
-      }
-    })
     it('compile', async () => {
       bytecode = await contract.compileContractAPI(identityContract)
       const prefix = bytecode.slice(0, 2)
@@ -503,7 +518,7 @@ describe('Contract', function () {
       isString.should.be.equal(true)
     })
     it('decode call result', async () => {
-      return contract.contractDecodeCallResultAPI(identityContract, 'main', encodedNumberSix, 'ok', { backend: 'fate' }).should.eventually.become(6)
+      return contract.contractDecodeCallResultAPI(identityContract, 'getArg', encodedNumberSix, 'ok').should.eventually.become(6)
     })
     it('Decode call-data using source', async () => {
       const decodedCallData = await contract.contractDecodeCallDataBySourceAPI(identityContract, 'init', callData)
@@ -517,10 +532,6 @@ describe('Contract', function () {
       decodedCallData.arguments.length.should.be.equal(0)
       decodedCallData.function.should.be.equal('init')
     })
-    it('Decode data API', async () => {
-      const returnData = 'cb_bzvA9Af6'
-      return contract.contractDecodeDataAPI('string', returnData).catch(e => 1).should.eventually.become(1)
-    })
     it('validate bytecode', async () => {
       return contract.validateByteCodeAPI(bytecode, identityContract).should.eventually.become(true)
     })
@@ -529,7 +540,7 @@ describe('Contract', function () {
         const cloned = R.clone(contract)
         await cloned.setCompilerUrl('https://compiler.aepps.comas')
       } catch (e) {
-        e.message.should.be.equal('Compiler do not respond')
+        e.message.should.be.equal('request to https://compiler.aepps.comas/api failed, reason: getaddrinfo ENOTFOUND compiler.aepps.comas')
       }
     })
   })
@@ -544,7 +555,10 @@ describe('Contract', function () {
       let decodedEventsUsingBuildInMethod
 
       before(async () => {
-        cInstance = await contract.getContractInstance(testContract, { filesystem })
+        cInstance = await contract.getContractInstance(
+          genTestContract(contract._isCompiler6),
+          { filesystem }
+        )
         await cInstance.deploy(['test', 1, 'some'])
         eventResult = await cInstance.methods.emitEvents()
         const { log } = await contract.tx(eventResult.hash)
@@ -592,7 +606,10 @@ describe('Contract', function () {
     })
 
     it('Generate ACI object', async () => {
-      contractObject = await contract.getContractInstance(testContract, { filesystem, opt: { ttl: 0 } })
+      contractObject = await contract.getContractInstance(
+        genTestContract(contract._isCompiler6),
+        { filesystem, opt: { ttl: 0 } }
+      )
       contractObject.should.have.property('interface')
       contractObject.should.have.property('aci')
       contractObject.should.have.property('source')
@@ -626,35 +643,27 @@ describe('Contract', function () {
       result.should.have.property('returnType')
       result.callerId.should.be.equal(onAccount)
     })
-    it('Can deploy/call using AEVM', async () => {
-      await contractObject.compile({ backend: 'aevm' })
-      const deployStatic = await contractObject.methods.init.get('123', 1, 'hahahaha', { backend: 'aevm' })
-      deployStatic.should.be.an('object')
-      deployed = await contractObject.methods.init.send('123', 1, 'hahahaha', { backend: 'aevm' })
-      deployed.should.be.an('object')
-      const { result } = await contractObject.methods.intFn(123, { backend: 'aevm' })
-      result.should.have.property('gasUsed')
-      result.should.have.property('returnType')
-      await contractObject.compile()
-    })
     it('Deploy contract before compile', async () => {
       contractObject.compiled = null
       await contractObject.methods.init('123', 1, 'hahahaha')
       const isCompiled = contractObject.compiled.length && contractObject.compiled.slice(0, 3) === 'cb_'
       isCompiled.should.be.equal(true)
     })
-    it('Deploy/Call contract with { waitMined: false }', async () => {
+    it('Deploy/Call contract with waitMined: false', async () => {
       const deployed = await contractObject.methods.init('123', 1, 'hahahaha', { waitMined: false })
       await contract.poll(deployed.transaction, { interval: 50, attempts: 1200 })
-      Boolean(deployed.result === undefined).should.be.equal(true)
-      Boolean(deployed.txData === undefined).should.be.equal(true)
+      expect(deployed.result).to.be.equal(undefined)
+      expect(deployed.txData).to.be.equal(undefined)
       const result = await contractObject.methods.intFn.send(2, { waitMined: false })
-      Boolean(result.result === undefined).should.be.equal(true)
-      Boolean(result.txData === undefined).should.be.equal(true)
+      expect(result.result).to.be.equal(undefined)
+      result.txData.should.not.be.equal(undefined)
       await contract.poll(result.hash, { interval: 50, attempts: 1200 })
     })
     it('Generate ACI object with corresponding bytecode', async () => {
-      await contract.getContractInstance(testContract, { contractAddress: contractObject.deployInfo.address, filesystem, opt: { ttl: 0 } })
+      await contract.getContractInstance(
+        genTestContract(contract._isCompiler6),
+        { contractAddress: contractObject.deployInfo.address, filesystem, opt: { ttl: 0 } }
+      )
     })
     it('Generate ACI object with not corresponding bytecode', async () => {
       try {
@@ -668,7 +677,10 @@ describe('Contract', function () {
     })
     it('Throw error on creating contract instance with invalid contractAddress', async () => {
       try {
-        await contract.getContractInstance(testContract, { filesystem, contractAddress: 'ct_asdasdasd', opt: { ttl: 0 } })
+        await contract.getContractInstance(
+          genTestContract(contract._isCompiler6),
+          { filesystem, contractAddress: 'ct_asdasdasd', opt: { ttl: 0 } }
+        )
       } catch (e) {
         e.message.should.be.equal('Invalid contract address')
       }
@@ -676,7 +688,10 @@ describe('Contract', function () {
     it('Throw error on creating contract instance with contract address which is not found on-chain or not active', async () => {
       const contractAddress = 'ct_ptREMvyDbSh1d38t4WgYgac5oLsa2v9xwYFnG7eUWR8Er5cmT'
       try {
-        await contract.getContractInstance(testContract, { filesystem, contractAddress, opt: { ttl: 0 } })
+        await contract.getContractInstance(
+          genTestContract(contract._isCompiler6),
+          { filesystem, contractAddress, opt: { ttl: 0 } }
+        )
       } catch (e) {
         e.message.should.be.equal(`Contract with address ${contractAddress} not found on-chain or not active`)
       }
@@ -803,7 +818,7 @@ describe('Contract', function () {
         })
         it('Valid', async () => {
           const { decodedResult } = await contractObject.methods.tupleFn(['test', 1])
-          JSON.stringify(decodedResult).should.be.equal(JSON.stringify(['test', 1]))
+          decodedResult.should.be.eql(['test', 1])
         })
       })
       describe('LIST', function () {
@@ -830,88 +845,57 @@ describe('Contract', function () {
         })
         it('Valid', async () => {
           const { decodedResult } = await contractObject.methods.listInListFn([[1, 2], [3, 4]])
-          JSON.stringify(decodedResult).should.be.equal(JSON.stringify([[1, 2], [3, 4]]))
+          decodedResult.should.be.eql([[1, 2], [3, 4]])
         })
       })
+
       describe('MAP', function () {
+        const address = 'ak_gvxNbZf5CuxYVfcUFoKAP4geZatWaC2Yy4jpx5vZoCKank4Gc'
+
         it('Valid', async () => {
-          const address = await contract.address()
-          const mapArg = new Map(
-            [
-              [address, ['someStringV', 324]]
-            ]
-          )
-          const objectFromMap = Array.from(mapArg.entries()).reduce((acc, [k, v]) => ({ ...acc, [k]: v }), {})
-          const { decodedResult } = await contractObject.methods.mapFn(objectFromMap)
-          JSON.stringify(decodedResult).should.be.equal(JSON.stringify(Array.from(mapArg.entries())))
+          const mapArg = new Map([[address, ['someStringV', 324]]])
+          const { decodedResult } = await contractObject.methods.mapFn(Object.fromEntries(mapArg))
+          decodedResult.should.be.eql(Array.from(mapArg.entries()))
         })
+
         it('Map With Option Value', async () => {
-          const address = await contract.address()
-          const mapArgWithSomeValue = new Map(
-            [
-              [address, ['someStringV', 123]]
-            ]
-          )
-          const mapArgWithNoneValue = new Map(
-            [
-              [address, ['someStringV', undefined]]
-            ]
-          )
-          const returnArgWithSomeValue = new Map(
-            [
-              [address, ['someStringV', 123]]
-            ]
-          )
-          const returnArgWithNoneValue = new Map(
-            [
-              [address, ['someStringV', undefined]]
-            ]
-          )
-          const resultWithSome = await contractObject.methods.mapOptionFn(mapArgWithSomeValue)
-          const resultWithNone = await contractObject.methods.mapOptionFn(mapArgWithNoneValue)
-
-          const decodedSome = resultWithSome.decodedResult
-
-          JSON.stringify(decodedSome).should.be.equal(JSON.stringify(Array.from(returnArgWithSomeValue.entries())))
-          JSON.stringify(resultWithNone.decodedResult).should.be.equal(JSON.stringify(Array.from(returnArgWithNoneValue.entries())))
+          const mapWithSomeValue = new Map([[address, ['someStringV', 123]]])
+          const mapWithNoneValue = new Map([[address, ['someStringV', undefined]]])
+          let result = await contractObject.methods.mapOptionFn(mapWithSomeValue)
+          result.decodedResult.should.be.eql(Array.from(mapWithSomeValue.entries()))
+          result = await contractObject.methods.mapOptionFn(mapWithNoneValue)
+          result.decodedResult.should.be.eql(Array.from(mapWithNoneValue.entries()))
         })
+
         it('Cast from string to int', async () => {
-          const address = await contract.address()
-          const mapArg = new Map(
-            [
-              [address, ['someStringV', '324']]
-            ]
-          )
+          const mapArg = new Map([[address, ['someStringV', '324']]])
           const result = await contractObject.methods.mapFn(mapArg)
           mapArg.set(address, ['someStringV', 324])
-          JSON.stringify(result.decodedResult).should.be.equal(JSON.stringify(Array.from(mapArg.entries())))
+          result.decodedResult.should.be.eql(Array.from(mapArg.entries()))
         })
+
         it('Cast from array to map', async () => {
-          const address = await contract.address()
-          const mapArg =
-            [
-              [address, ['someStringV', 324]]
-            ]
+          const mapArg = [[address, ['someStringV', 324]]]
           const { decodedResult } = await contractObject.methods.mapFn(mapArg)
-          JSON.stringify(decodedResult).should.be.equal(JSON.stringify(mapArg))
+          decodedResult.should.be.eql(mapArg)
         })
       })
+
       describe('RECORD/STATE', function () {
-        const objEq = (obj, obj2) => !Object.entries(obj).find(([key, val]) => JSON.stringify(obj2[key]) !== JSON.stringify(val))
         it('Valid Set Record (Cast from JS object)', async () => {
           await contractObject.methods.setRecord({ value: 'qwe', key: 1234, testOption: 'test' })
           const state = await contractObject.methods.getRecord()
 
-          objEq(state.decodedResult, { value: 'qwe', key: 1234, testOption: 'test' }).should.be.equal(true)
+          state.decodedResult.should.be.eql({ value: 'qwe', key: 1234, testOption: 'test' })
         })
         it('Get Record(Convert to JS object)', async () => {
           const result = await contractObject.methods.getRecord()
-          objEq(result.decodedResult, { value: 'qwe', key: 1234, testOption: 'test' }).should.be.equal(true)
+          result.decodedResult.should.be.eql({ value: 'qwe', key: 1234, testOption: 'test' })
         })
         it('Get Record With Option (Convert to JS object)', async () => {
           await contractObject.methods.setRecord({ key: 1234, value: 'qwe', testOption: 'resolved string' })
           const result = await contractObject.methods.getRecord()
-          objEq(result.decodedResult, { value: 'qwe', key: 1234, testOption: 'resolved string' }).should.be.equal(true)
+          result.decodedResult.should.be.eql({ value: 'qwe', key: 1234, testOption: 'resolved string' })
         })
         it('Invalid value type', async () => {
           try {
@@ -930,7 +914,7 @@ describe('Contract', function () {
         it('Set Some Option List Value(Cast from JS value/Convert result to JS)', async () => {
           const optionRes = await contractObject.methods.listOption([[1, 'testString']])
 
-          JSON.stringify(optionRes.decodedResult).should.be.equal(JSON.stringify([[1, 'testString']]))
+          optionRes.decodedResult.should.be.eql([[1, 'testString']])
         })
         it('Set None Option Value(Cast from JS value/Convert to JS)', async () => {
           const optionRes = await contractObject.methods.intOption(undefined)
@@ -980,7 +964,7 @@ describe('Contract', function () {
         })
         it('Valid', async () => {
           const res = await contractObject.methods.datTypeFn('Year')
-          JSON.stringify(res.decodedResult).should.be.equal('"Year"')
+          res.decodedResult.should.be.equal('Year')
         })
       })
       describe('Hash', function () {
@@ -997,8 +981,7 @@ describe('Contract', function () {
           try {
             await contractObject.methods.hashFn(decoded)
           } catch (e) {
-            const isSizeCheck = e.message.indexOf('not a 32 bytes') !== -1
-            isSizeCheck.should.be.equal(true)
+            e.message.should.include('not a 32 bytes')
           }
         })
         it('Valid', async () => {
@@ -1024,8 +1007,7 @@ describe('Contract', function () {
           try {
             await contractObject.methods.signatureFn(decoded)
           } catch (e) {
-            const isSizeCheck = e.message.indexOf('not a 64 bytes') !== -1
-            isSizeCheck.should.be.equal(true)
+            e.message.should.include('not a 64 bytes')
           }
         })
         it('Valid', async () => {
@@ -1052,8 +1034,7 @@ describe('Contract', function () {
           try {
             await contractObject.methods.bytesFn(Buffer.from([...decoded, 2]))
           } catch (e) {
-            const isSizeCheck = e.message.indexOf('not a 32 bytes') !== -1
-            isSizeCheck.should.be.equal(true)
+            e.message.should.include('not a 32 bytes')
           }
         })
         it('Valid', async () => {
@@ -1081,9 +1062,8 @@ describe('Contract', function () {
         contractObject.setOptions({ skipTransformDecoded: true })
         const res = await contractObject.methods.listFn([1, 2])
         const decoded = await res.decode()
-        const decodedJSON = JSON.stringify([1, 2])
         contractObject.setOptions({ skipTransformDecoded: false })
-        JSON.stringify(decoded).should.be.equal(decodedJSON)
+        decoded.should.be.eql([1, 2])
       })
       it('Call contract with contract type argument', async () => {
         const result = await contractObject.methods.approve(0, 'ct_AUUhhVZ9de4SbeRk8ekos4vZJwMJohwW5X8KQjBMUVduUmoUh')
@@ -1093,7 +1073,10 @@ describe('Contract', function () {
     describe('Type resolving', () => {
       let cInstance
       before(async () => {
-        cInstance = await contract.getContractInstance(testContract, { filesystem })
+        cInstance = await contract.getContractInstance(
+          genTestContract(contract._isCompiler6),
+          { filesystem }
+        )
       })
       it('Resolve remote contract type', async () => {
         const fnACI = getFunctionACI(cInstance.aci, 'remoteContract', { external: cInstance.externalAci })
@@ -1101,7 +1084,18 @@ describe('Contract', function () {
       })
       it('Resolve external contract type', async () => {
         const fnACI = getFunctionACI(cInstance.aci, 'remoteArgs', { external: cInstance.externalAci })
-        readType(fnACI.arguments[0].type, { bindings: fnACI.bindings }).should.eql(JSON.parse('{"t":"record","generic":[{"name":"value","type":"string"},{"name":"key","type":{"list":["Voting.test_type"]}}]}'))
+        readType(fnACI.arguments[0].type, { bindings: fnACI.bindings }).should.eql({
+          t: 'record',
+          generic: [{
+            name: 'value',
+            type: 'string'
+          }, {
+            name: 'key',
+            type: {
+              list: ['Voting.test_type']
+            }
+          }]
+        })
         readType(fnACI.returns, { bindings: fnACI.bindings }).t.should.be.equal('int')
       })
     })

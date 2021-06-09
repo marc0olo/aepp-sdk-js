@@ -7,11 +7,6 @@
 
 ContractACI module
 
-**Example**  
-```js
-import ContractACI from '@aeternity/aepp-sdk/es/contract/aci'
-```
-
 
 <a id="exp_module_@aeternity/aepp-sdk/es/contract/aci--instance.compile"></a>
 
@@ -117,21 +112,6 @@ const staticCallResult = await contractIns.call('setState', [123], { callStatic:
 Also you can call contract like: await contractIns.methods.setState(123, options)
 Then sdk decide to make on-chain or static call(dry-run API) transaction based on function is stateful or not
 ```
-<a id="exp_module_@aeternity/aepp-sdk/es/contract/aci--exports.ContractACI"></a>
-
-#### ContractACI
-
-**Type Sig:** ContractACI() ⇒ `Object` 
-
-Contract ACI Stamp
-
-**Kind**: Exported function  
-**Returns**: `Object` - Contract compiler instance  
-**rtype**: `Stamp`
-**Example**  
-```js
-ContractACI()
-```
 ,
 <a id="module_@aeternity/aepp-sdk/es/contract/compiler"></a>
 
@@ -144,14 +124,12 @@ This is the complement to [@aeternity/aepp-sdk/es/contract](#module_@aeternity/a
 
 **Example**  
 ```js
-import ContractCompilerAPI from '@aeternity/aepp-sdk/es/contract/compiler'
+import { ContractCompilerAPI } from '@aeternity/aepp-sdk'
 ```
-<a id="exp_module_@aeternity/aepp-sdk/es/contract/compiler--ContractCompilerAPI"></a>
+<a id="exp_module_@aeternity/aepp-sdk/es/contract/compiler--module.exports"></a>
 
-#### ContractCompilerAPI
-
-**Type Sig:** ContractCompilerAPI([options]) ⇒ `Object` 
-
+#### exports
+**Type Sig:** module.exports([options]) ⇒ `Object` 
 Contract Compiler Stamp
 
 This stamp include api call's related to contract compiler functionality.
@@ -179,11 +157,7 @@ Generalize Account module - routines to use generalize account
 
 **Example**  
 ```js
-import GeneralizeAccount from '@aeternity/aepp-sdk/es/contract/ga' (Using tree-shaking)
-```
-**Example**  
-```js
-import { GeneralizeAccount } from '@aeternity/aepp-sdk' (Using bundle)
+import { GeneralizeAccount } from '@aeternity/aepp-sdk'
 ```
 
 
@@ -220,7 +194,7 @@ await client.spend(10000, receiverPub, { authData: { source: authContract, args:
 
 ##### createGeneralizeAccount
 
-**Type Sig:** createGeneralizeAccount(authFnName, source, args, options) ⇒ `Promise.&lt;Readonly.&lt;{result: \*, owner: \*, createdAt: Date, address, rawTx: \*, transaction: \*}&gt;&gt;` 
+**Type Sig:** createGeneralizeAccount(authFnName, source, [args], [options]) ⇒ `Promise.&lt;Readonly.&lt;{result: \*, owner: \*, createdAt: Date, address, rawTx: \*, transaction: \*}&gt;&gt;` 
 
 Convert current account to GA account
 

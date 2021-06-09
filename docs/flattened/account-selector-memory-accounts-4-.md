@@ -184,11 +184,7 @@ Memory Account module
 
 **Example**  
 ```js
-//JS
-import MemoryAccount from '@aeternity/aepp-sdk/es/account/memory'
-
-//NodeJS
-const { Universal: MemoryAccount } = require('@aeternity/aepp-sdk')
+import { MemoryAccount } from '@aeternity/aepp-sdk'
 ```
 <a id="exp_module_@aeternity/aepp-sdk/es/account/memory--MemoryAccount"></a>
 
