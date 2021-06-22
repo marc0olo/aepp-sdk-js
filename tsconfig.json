@@ -13,7 +13,6 @@
     "lib": ["es2019"],
     "module": "es6",
     "target": "es5",
-    "lib": ["es2019"],
     "moduleResolution": "node",
     "preserveConstEnums": true,
     "declaration": true,
