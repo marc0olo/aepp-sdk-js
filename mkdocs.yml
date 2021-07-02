@@ -5,7 +5,6 @@ plugins:
       hooks:
         on_pre_build: 'docs.hooks:pre_build'
 repo_url: 'https://github.com/aeternity/aepp-sdk-js'
-edit_uri: ''
 
 extra:
   version:
